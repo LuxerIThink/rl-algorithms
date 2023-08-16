@@ -75,6 +75,60 @@ class DQN(nn.Module, Algorithm):
         return self.layer3(x)
 
 
+class DDPGActor(nn.Module, Algorithm):
+    def __init__(self, n_observations, n_actions):
+        super(DDPGActor, self).__init__()
+        self.layer1 = nn.Linear(n_observations, 128)
+        self.layer2 = nn.Linear(128, 128)
+        self.layer3 = nn.Linear(128, n_actions)
+        self.output_activation = nn.Tanh()
+
+    def forward(self, x):
+        x = f.relu(self.layer1(x))
+        x = f.relu(self.layer2(x))
+        return self.output_activation(self.layer3(x))
+
+
+class DDPGCritic(nn.Module, Algorithm):
+    def __init__(self, n_observations, n_actions):
+        super(DDPGCritic, self).__init__()
+        self.layer1 = nn.Linear(n_observations + n_actions, 128)
+        self.layer2 = nn.Linear(128, 128)
+        self.layer3 = nn.Linear(128, 1)
+
+    def forward(self, x):
+        x = f.relu(self.layer1(x))
+        x = f.relu(self.layer2(x))
+        return self.layer3(x)
+
+
+class A2CActor(nn.Module, Algorithm):
+    def __init__(self, n_observations, n_actions):
+        super(A2CActor, self).__init__()
+        self.layer1 = nn.Linear(n_observations, 128)
+        self.layer2 = nn.Linear(128, 128)
+        self.layer3 = nn.Linear(128, n_actions)
+        self.output_activation = nn.Softmax(dim=-1)
+
+    def forward(self, x):
+        x = f.relu(self.layer1(x))
+        x = f.relu(self.layer2(x))
+        return self.output_activation(self.layer3(x))
+
+
+class A2CCritic(nn.Module, Algorithm):
+    def __init__(self, n_observations):
+        super(A2CCritic, self).__init__()
+        self.layer1 = nn.Linear(n_observations, 128)
+        self.layer2 = nn.Linear(128, 128)
+        self.layer3 = nn.Linear(128, 1)
+
+    def forward(self, x):
+        x = f.relu(self.layer1(x))
+        x = f.relu(self.layer2(x))
+        return self.layer3(x)
+
+
 class Agent:
     def __init__(
         self,
@@ -168,7 +222,7 @@ class TrainingLoop:
         self.target_net = policy_net(n_observations, n_actions).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.agent = Agent(self.policy_net, self.target_net)
-        self.num_episodes = 50 if torch.cuda.is_available() else 50
+        self.num_episodes = 600 if torch.cuda.is_available() else 50
         self.episode_durations = []
 
     def run(self):
@@ -242,7 +296,7 @@ def plot_durations(episode_durations, show_result=False):
 
 
 # Environment settings
-env = gym.make("Swimmer-v4", render_mode="human")  # Change environment name as needed
+env = gym.make("CartPole-v1", render_mode="human")  # Change environment name as needed
 
 # Check for CUDA availability
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -264,7 +318,7 @@ else:
 
 n_observations = env.observation_space.shape[0]
 
-train = TrainingLoop(DQN, DQN)
+train = TrainingLoop(A2CActor, A2CCritic)
 train.run()
 print("Complete")
 model_path = "model_ppo_swimmer.pth"
