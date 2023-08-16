@@ -4,13 +4,11 @@ import random
 import matplotlib.pyplot as plt
 from collections import namedtuple, deque
 from itertools import count
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as f
-
-from gymnasium import spaces
+from abc import ABC, abstractmethod
 
 
 class ReplayMemory:
@@ -42,20 +40,13 @@ class ExplorationStrategy:
         return epsilon
 
 
-class DQN(nn.Module):
-    def __init__(self, n_observations, n_actions):
-        super(DQN, self).__init__()
-        self.layer1 = nn.Linear(n_observations, 128)
-        self.layer2 = nn.Linear(128, 128)
-        self.layer3 = nn.Linear(128, n_actions)
-
+class Algorithm(ABC):
+    @abstractmethod
     def forward(self, x):
-        x = f.relu(self.layer1(x))
-        x = f.relu(self.layer2(x))
-        return self.layer3(x)
+        pass
 
 
-class PPO(nn.Module):
+class PPO(nn.Module, Algorithm):
     def __init__(self, n_observations, n_actions):
         super(PPO, self).__init__()
         self.policy = nn.Sequential(
@@ -71,16 +62,40 @@ class PPO(nn.Module):
         return self.policy(x)
 
 
+class DQN(nn.Module, Algorithm):
+    def __init__(self, n_observations, n_actions):
+        super(DQN, self).__init__()
+        self.layer1 = nn.Linear(n_observations, 128)
+        self.layer2 = nn.Linear(128, 128)
+        self.layer3 = nn.Linear(128, n_actions)
+
+    def forward(self, x):
+        x = f.relu(self.layer1(x))
+        x = f.relu(self.layer2(x))
+        return self.layer3(x)
+
+
 class Agent:
-    def __init__(self, batch_size: int = None, gamma: int = None, tau: int = None):
+    def __init__(
+        self,
+        policy_net,
+        target_net,
+        batch_size: int = None,
+        gamma: int = None,
+        tau: int = None,
+    ):
         # Hyperparameters
         self.batch_size = batch_size or 128
         self.gamma = gamma or 0.99
         self.tau = tau or 0.005
         self.lr = 1e-4
+        self.policy_net = policy_net
+        self.target_net = target_net
         # Others
         self.memory = ReplayMemory(10000)
-        self.optimizer = optim.AdamW(policy_net.parameters(), lr=self.lr, amsgrad=True)
+        self.optimizer = optim.AdamW(
+            self.policy_net.parameters(), lr=self.lr, amsgrad=True
+        )
         self.criterion = nn.SmoothL1Loss()
         self.exploration_strategy = ExplorationStrategy()
 
@@ -88,11 +103,17 @@ class Agent:
         sample = random.random()
         if sample > self.exploration_strategy.get_epsilon():
             with torch.no_grad():
-                return policy_net(state).max(1)[1].view(1, 1)
+                if continuous_actions:
+                    return self.policy_net(state).squeeze().cpu().numpy()
+                else:
+                    return self.policy_net(state).max(1)[1].view(1, 1)
         else:
-            return torch.tensor(
-                data=[[env.action_space.sample()]], device=device, dtype=torch.long
-            )
+            if continuous_actions:
+                return action_space.sample()
+            else:
+                return torch.tensor(
+                    data=[[env.action_space.sample()]], device=device, dtype=torch.long
+                )
 
     def optimize_model(self):
         if len(self.memory) < self.batch_size:
@@ -101,22 +122,34 @@ class Agent:
         batch = transition(*zip(*transitions))
 
         non_final_mask = torch.tensor(
-            [s is not None for s in batch.next_state], device=device, dtype=torch.bool
+            [s is not None for s in batch.next_state],
+            device=device,
+            dtype=torch.bool,
         )
         non_final_next_states = torch.cat(
             [s for s in batch.next_state if s is not None]
         )
-        state_batch = torch.cat(batch.state)
-        action_batch = torch.cat(batch.action)
-        reward_batch = torch.cat(batch.reward)
-
-        state_action_values = policy_net(state_batch).gather(1, action_batch)
+        if continuous_actions:
+            state_batch = torch.cat([s.to(device) for s in batch.state])
+            action_batch = torch.tensor(
+                batch.action, device=device, dtype=torch.float32
+            )
+            reward_batch = torch.cat([r.to(device) for r in batch.reward])
+            policy_output = self.policy_net(state_batch)
+            state_action_values = torch.sum(
+                policy_output * action_batch, dim=1, keepdim=True
+            )
+        else:
+            state_batch = torch.cat(batch.state)
+            action_batch = torch.cat(batch.action)
+            reward_batch = torch.cat(batch.reward)
+            state_action_values = self.policy_net(state_batch).gather(1, action_batch)
 
         next_state_values = torch.zeros(self.batch_size, device=device)
         with torch.no_grad():
-            next_state_values[non_final_mask] = target_net(non_final_next_states).max(
-                1
-            )[0]
+            next_state_values[non_final_mask] = self.target_net(
+                non_final_next_states
+            ).max(1)[0]
         expected_state_action_values = (next_state_values * self.gamma) + reward_batch
 
         loss = self.criterion(
@@ -125,14 +158,17 @@ class Agent:
 
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
+        torch.nn.utils.clip_grad_value_(self.policy_net.parameters(), 100)
         self.optimizer.step()
 
 
 class TrainingLoop:
-    def __init__(self):
-        self.agent = Agent()
-        self.num_episodes = 500 if torch.cuda.is_available() else 50
+    def __init__(self, policy_net, target_net):
+        self.policy_net = policy_net(n_observations, n_actions).to(device)
+        self.target_net = policy_net(n_observations, n_actions).to(device)
+        self.target_net.load_state_dict(self.policy_net.state_dict())
+        self.agent = Agent(self.policy_net, self.target_net)
+        self.num_episodes = 50 if torch.cuda.is_available() else 50
         self.episode_durations = []
 
     def run(self):
@@ -145,7 +181,10 @@ class TrainingLoop:
 
         for t in count():
             action = self.agent.select_action(state)
-            observation, reward, terminated, truncated, _ = env.step(action.item())
+            if continuous_actions:
+                observation, reward, terminated, truncated, _ = env.step(action)
+            else:
+                observation, reward, terminated, truncated, _ = env.step(action.item())
             reward_tensor = self.create_reward_tensor(reward)
 
             if terminated:
@@ -170,13 +209,13 @@ class TrainingLoop:
         return torch.tensor([reward], device=device)
 
     def update_target_net_weights(self):
-        target_net_state_dict = target_net.state_dict()
-        policy_net_state_dict = policy_net.state_dict()
+        target_net_state_dict = self.target_net.state_dict()
+        policy_net_state_dict = self.policy_net.state_dict()
         for key in policy_net_state_dict:
             target_net_state_dict[key] = policy_net_state_dict[
                 key
             ] * self.agent.tau + target_net_state_dict[key] * (1 - self.agent.tau)
-        target_net.load_state_dict(target_net_state_dict)
+        self.target_net.load_state_dict(target_net_state_dict)
 
     def record_episode_duration(self, duration):
         self.episode_durations.append(duration + 1)
@@ -203,30 +242,31 @@ def plot_durations(episode_durations, show_result=False):
 
 
 # Environment settings
-env = gym.make("CartPole-v1", render_mode="human")
+env = gym.make("Swimmer-v4", render_mode="human")  # Change environment name as needed
 
 # Check for CUDA availability
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 transition = namedtuple("Transition", ("state", "action", "next_state", "reward"))
 
-action_space_type = type(env.action_space)
+# Determine action and observation space
+action_space = env.action_space
+action_space_type = type(action_space)
 
-if action_space_type == spaces.discrete.Discrete:
-    n_actions = env.action_space.n
-elif action_space_type == spaces.box.Box:
-    n_actions = env.action_space.shape[-1]
+if isinstance(action_space, gym.spaces.Discrete):
+    n_actions = action_space.n
+    continuous_actions = False
+elif isinstance(action_space, gym.spaces.Box):
+    n_actions = action_space.shape[0]
+    continuous_actions = True
 else:
     exit(0)
-state, info = env.reset()
-n_observations = len(state)
-policy_net = PPO(n_observations, n_actions).to(device)
-target_net = PPO(n_observations, n_actions).to(device)
-target_net.load_state_dict(policy_net.state_dict())
 
-train = TrainingLoop()
+n_observations = env.observation_space.shape[0]
+
+train = TrainingLoop(DQN, DQN)
 train.run()
 print("Complete")
-model_path = "model_dqn_acrobot.pth"
-torch.save(policy_net.state_dict(), model_path)
+model_path = "model_ppo_swimmer.pth"
+torch.save(train.agent.policy_net.state_dict(), model_path)
 plot_durations(train.episode_durations, True)
