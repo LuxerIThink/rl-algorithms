@@ -1,9 +1,10 @@
 mujoco-py==2.1.2.14
 gymnasium==0.29.0
-gymnasium\[mujoco\]==0.29.0
-gymnasium\[classic_control\]==0.29.0
+gymnasium[mujoco]==0.29.0
+gymnasium[classic_control]==0.29.0
 matplotlib==3.7.2
 pillow==10.0.0
 torch==2.0.1
 pygame==2.5.0
 ipython==8.14.0
+cython<3
