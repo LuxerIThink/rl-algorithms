@@ -8,3 +8,4 @@ torch==2.0.1
 pygame==2.5.0
 ipython==8.14.0
 cython<3
+numpy==1.25.2
