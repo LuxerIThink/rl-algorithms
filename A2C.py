@@ -7,7 +7,6 @@ from torch.nn.functional import smooth_l1_loss
 import matplotlib.pyplot as plt
 
 
-# Define the Actor-Critic network
 class ActorCritic(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_size):
         super(ActorCritic, self).__init__()
@@ -31,18 +30,15 @@ class ActorCritic(nn.Module):
         return action_dist, value
 
 
-# Hyperparameters
-lr = 0.0001  # Decrease the learning rate
-gamma = 0.995  # Decrease the discount factor
+lr = 0.001
+gamma = 0.995
 hidden_size = 256
 num_episodes = 1000
 
-# Create environment
 env = gym.make("Hopper-v4")
 state_dim = env.observation_space.shape[0]
 action_dim = env.action_space.shape[0]
 
-# Initialize the Actor-Critic network and optimizer
 model = ActorCritic(state_dim, action_dim, hidden_size)
 optimizer = optim.Adam(model.parameters(), lr=lr)
 episode_rewards = []

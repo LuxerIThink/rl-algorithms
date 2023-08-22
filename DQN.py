@@ -6,23 +6,6 @@ import torch.optim as optim
 import random
 import matplotlib.pyplot as plt
 
-# Hyperparameters
-gamma = 0.99
-epsilon_decay = 0.995
-epsilon_min = 0.01
-learning_rate = 0.05
-num_episodes = 1500
-batch_size = 64
-num_steps = 500
-target_reward = 500
-target_episodes = 10
-
-# Create CartPole environment
-consecutive_success = 0
-env = gym.make("CartPole-v1")
-state_size = env.observation_space.shape[0]
-action_size = env.action_space.n
-
 
 class QNetwork(nn.Module):
     def __init__(self):
@@ -86,6 +69,24 @@ class DQNAgent:
         self.target_network.load_state_dict(self.q_network.state_dict())
 
 
+# Hyperparameters
+gamma = 0.99
+epsilon_decay = 0.995
+epsilon_min = 0.01
+learning_rate = 0.05
+num_episodes = 1500
+batch_size = 64
+num_steps = 500
+target_reward = 500
+target_episodes = 10
+
+# Create CartPole environment
+consecutive_success = 0
+env = gym.make("CartPole-v1")
+state_size = env.observation_space.shape[0]
+action_size = env.action_space.n
+
+
 # Initialize DQN agent
 agent = DQNAgent()
 
@@ -128,7 +129,7 @@ plt.xlabel("Episode")
 plt.ylabel("Reward")
 plt.show()
 
-checkpoint_path = "Hopper-v4_A2C.pth"
+checkpoint_path = "CartPole-v1_DQN.pth"
 torch.save(agent.q_network.state_dict(), checkpoint_path)
 print(f"Model checkpoint saved: {checkpoint_path}")
 

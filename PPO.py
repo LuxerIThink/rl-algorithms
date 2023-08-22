@@ -6,29 +6,7 @@ import torch.optim as optim
 from torch.distributions import Categorical, MultivariateNormal
 import matplotlib.pyplot as plt
 
-# Hyperparameters
-learning_rate = 0.02
-gamma = 0.98
-epsilon_clip = 0.2
-num_epochs = 20
-num_steps = 500
-num_episodes = 1000
-target_reward = 500
-target_episodes = 10
-batch_size = 64
 
-# Create CartPole environment
-env = gym.make("Acrobot-v1")
-state_size = env.observation_space.shape[0]
-match type(env.action_space):
-    case gym.spaces.Discrete:
-        action_size = env.action_space.n
-    case gym.spaces.Box:
-        action_size = env.action_space.shape[0]
-consecutive_success = 0
-
-
-# Define policy network
 class Policy(nn.Module):
     def __init__(self):
         super(Policy, self).__init__()
@@ -43,10 +21,6 @@ class Policy(nn.Module):
         return self.fc(x)
 
 
-policy = Policy()
-optimizer = optim.Adam(policy.parameters(), lr=learning_rate)
-
-
 def get_action(state):
     match type(env.action_space):
         case gym.spaces.Discrete:
@@ -56,11 +30,11 @@ def get_action(state):
             action = action_dist.sample()
             return action.item(), action_probs[action]
         case gym.spaces.Box:
-            state_tensor = torch.from_numpy(state).float()  # Convert to float tensor
+            state_tensor = torch.from_numpy(state).float()
             action_mean = policy(state_tensor)
             cov_matrix = torch.diag(
                 torch.ones(action_size)
-            )  # Diagonal covariance matrix for simplicity
+            )
             action_dist = torch.distributions.MultivariateNormal(
                 action_mean, cov_matrix
             )
@@ -89,14 +63,13 @@ def PPO_update(
         ):
             state_tensor = torch.tensor(state, dtype=torch.float)
             old_prob_tensor = old_prob.detach().clone().requires_grad_(True)
-            return_tensor = torch.tensor(return_, dtype=torch.float)
             advantage_tensor = torch.tensor(advantage, dtype=torch.float)
 
             action_probs = torch.softmax(policy(state_tensor), dim=-1)
 
             match type(env.action_space):
                 case gym.spaces.Discrete:
-                    new_prob = action_probs[action]  # Use action as index directly
+                    new_prob = action_probs[action]
                     ratio = new_prob / old_prob_tensor
                 case gym.spaces.Box:
                     action_mean = policy(state_tensor)
@@ -127,6 +100,30 @@ def PPO_update(
             optimizer.step()
 
 
+# Hyperparameters
+learning_rate = 0.02
+gamma = 0.995
+epsilon_clip = 0.2
+num_epochs = 20
+num_steps = 500
+num_episodes = 1000
+target_reward = 500
+target_episodes = 10
+batch_size = 64
+
+# Create CartPole environment
+env = gym.make("CartPole-v1")
+state_size = env.observation_space.shape[0]
+match type(env.action_space):
+    case gym.spaces.Discrete:
+        action_size = env.action_space.n
+    case gym.spaces.Box:
+        action_size = env.action_space.shape[0]
+consecutive_success = 0
+
+policy = Policy()
+optimizer = optim.Adam(policy.parameters(), lr=learning_rate)
+
 episode_rewards = []
 # Training loop
 for episode in range(num_episodes):
@@ -145,12 +142,12 @@ for episode in range(num_episodes):
         action, action_prob = get_action(state)
         next_state, reward, terminated, truncated, _ = env.step(
             action
-        )  # Update: Unpack the terminated flag
+        )
 
         states.append(state)
         actions.append(action)
         rewards.append(reward)
-        masks.append(1 - terminated)  # Update: Use terminated to set masks
+        masks.append(1 - terminated)
         values.append(policy(torch.tensor(state, dtype=torch.float)).detach().numpy())
         old_probs.append(action_prob)
 
@@ -191,7 +188,7 @@ plt.ylabel("Reward")
 plt.show()
 
 
-checkpoint_path = "Acrobot-v1_PPO.pth"
+checkpoint_path = "CartPole-v1_PPO.pth"
 torch.save(policy.state_dict(), checkpoint_path)
 print(f"Model checkpoint saved: {checkpoint_path}")
 

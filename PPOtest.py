@@ -4,11 +4,6 @@ import torch.nn as nn
 from torch.distributions import Categorical
 
 
-env = gym.make("CartPole-v1", render_mode="human")
-state_size = env.observation_space.shape[0]
-action_size = env.action_space.n
-
-
 class QNetwork(nn.Module):
     def __init__(self):
         super(QNetwork, self).__init__()
@@ -23,18 +18,23 @@ class QNetwork(nn.Module):
         return x
 
 
-policy = QNetwork()
-checkpoint_path = "Hopper-v4_A2C.pth"
-policy.load_state_dict(torch.load(checkpoint_path))
-policy.eval()
-
-
 def get_action(state):
     state_tensor = torch.tensor(state, dtype=torch.float)
     action_probs = torch.softmax(policy(state_tensor), dim=-1)
     action_dist = Categorical(action_probs)
     action = action_dist.sample()
     return action.item()
+
+
+env = gym.make("CartPole-v1", render_mode="human")
+state_size = env.observation_space.shape[0]
+action_size = env.action_space.n
+
+
+policy = QNetwork()
+checkpoint_path = "Hopper-v4_A2C.pth"
+policy.load_state_dict(torch.load(checkpoint_path))
+policy.eval()
 
 
 num_test_episodes = 10

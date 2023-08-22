@@ -7,7 +7,6 @@ import random
 import matplotlib.pyplot as plt
 
 
-# Define the Actor and Critic neural networks
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Actor, self).__init__()
@@ -36,7 +35,6 @@ class Critic(nn.Module):
         return x
 
 
-# DDPG agent class
 class DDPGAgent:
     def __init__(self, state_dim, action_dim):
         self.actor = Actor(state_dim, action_dim)
@@ -51,7 +49,7 @@ class DDPGAgent:
 
         self.replay_buffer = []
         self.batch_size = 256
-        self.gamma = 0.98
+        self.gamma = 0.995
         self.tau = 1e-3
 
     def select_action(self, state):
@@ -143,7 +141,7 @@ plt.xlabel("Episode")
 plt.ylabel("Reward")
 plt.show()
 
-checkpoint_path = "Hopper-v4_A2C.pth"
+checkpoint_path = "Hopper-v4_DDPG.pth"
 torch.save(agent.actor.state_dict(), checkpoint_path)
 print(f"Model checkpoint saved: {checkpoint_path}")
 
