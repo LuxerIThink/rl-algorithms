@@ -48,10 +48,10 @@ class DQNAgent:
             *batch
         )
 
-        state_batch = torch.tensor(state_batch, dtype=torch.float32)
+        state_batch = torch.tensor(np.array(state_batch), dtype=torch.float32)
         action_batch = torch.tensor(action_batch, dtype=torch.long)
         reward_batch = torch.tensor(reward_batch, dtype=torch.float32)
-        next_state_batch = torch.tensor(next_state_batch, dtype=torch.float32)
+        next_state_batch = torch.tensor(np.array(next_state_batch), dtype=torch.float32)
         done_batch = torch.tensor(done_batch, dtype=torch.float32)
 
         q_values = self.q_network(state_batch).gather(1, action_batch.unsqueeze(1))
@@ -82,7 +82,7 @@ target_episodes = 10
 
 # Create CartPole environment
 consecutive_success = 0
-env = gym.make("CartPole-v1")
+env = gym.make("Acrobot-v1")
 state_size = env.observation_space.shape[0]
 action_size = env.action_space.n
 
